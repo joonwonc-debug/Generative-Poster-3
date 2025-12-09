@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import streamlit as st
 from streamlit_image_coordinates import streamlit_image_coordinates
+from io import BytesIO
 
 st.set_page_config(page_title="NoiseTouch Generative Poster", layout="centered")
 
@@ -30,6 +31,12 @@ def draw_poster(blobs):
     ax.text(0.05, 0.91, "Week 4 • Arts & Advanced Big Data", fontsize=10, transform=ax.transAxes)
     return fig
 
+def fig_to_png_bytes(fig):
+    buf = BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight", dpi=150)
+    buf.seek(0)
+    return buf
+
 # -----------------------------
 # SESSION STATE
 # -----------------------------
@@ -40,7 +47,7 @@ if "blobs" not in st.session_state:
     st.session_state.blobs = []
 
 # -----------------------------
-# SIDEBAR UI
+# SIDEBAR
 # -----------------------------
 st.sidebar.header("Controls")
 
@@ -64,20 +71,20 @@ if st.sidebar.button("Generate New Poster"):
 # DRAW FIGURE
 # -----------------------------
 fig = draw_poster(st.session_state.blobs)
-st.pyplot(fig, use_container_width=False)
+png_bytes = fig_to_png_bytes(fig)
+
+coords = streamlit_image_coordinates(png_bytes, key="poster")
+st.image(png_bytes)
 
 # -----------------------------
-# CLICK TO ADD BLOB
+# CLICK EVENT
 # -----------------------------
-coords = streamlit_image_coordinates(fig)
-
-if coords is not None:
-    # Matplotlib figure coordinates are normalized (0~1)
-    x = coords["x"] / fig.bbox.width
-    y = 1 - (coords["y"] / fig.bbox.height)
+if coords is not None and "x" in coords and "y" in coords:
+    x_norm = coords["x"] / fig.bbox.width
+    y_norm = 1 - (coords["y"] / fig.bbox.height)
 
     st.session_state.blobs.append({
-        "center": (x, y),
+        "center": (x_norm, y_norm),
         "r": random.uniform(0.1, 0.3),
         "wobble": random.uniform(0.1, 0.3),
         "color": random.choice(st.session_state.palette),
