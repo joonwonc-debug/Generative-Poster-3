@@ -2,7 +2,10 @@ import random
 import math
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider, Button
+import streamlit as st
+from streamlit_image_coordinates import streamlit_image_coordinates
+
+st.set_page_config(page_title="NoiseTouch Generative Poster", layout="centered")
 
 def random_palette(k=7):
     return [(random.random(), random.random(), random.random()) for _ in range(k)]
@@ -14,58 +17,71 @@ def blob(center=(0.5, 0.5), r=0.3, points=180, wobble=0.08):
     y = center[1] + radii * np.sin(angles)
     return x, y
 
-def draw_poster(ax, n_layers=12, wobble_range=(0.15,0.35), palette=None):
-    ax.clear()
+def draw_poster(blobs):
+    fig, ax = plt.subplots(figsize=(7,10))
     ax.set_facecolor((0.98,0.98,0.97))
     ax.axis('off')
 
-    if palette is None:
-        palette = random_palette()
-
-    for _ in range(n_layers):
-        cx, cy = random.random(), random.random()
-        rr = random.uniform(0.15, 0.45)
-        wobble = random.uniform(*wobble_range)
-        x, y = blob(center=(cx, cy), r=rr, wobble=wobble)
-        color = random.choice(palette)
-        alpha = random.uniform(0.3, 0.6)
-        ax.fill(x, y, color=color, alpha=alpha, edgecolor=(0,0,0,0))
+    for b in blobs:
+        x, y = blob(center=b["center"], r=b["r"], wobble=b["wobble"])
+        ax.fill(x, y, color=b["color"], alpha=b["alpha"], edgecolor=(0,0,0,0))
 
     ax.text(0.05, 0.95, "NoiseTouch Generative Poster", fontsize=16, weight='bold', transform=ax.transAxes)
     ax.text(0.05, 0.91, "Week 4 • Arts & Advanced Big Data", fontsize=10, transform=ax.transAxes)
-    plt.draw()
+    return fig
 
-def on_click(event, ax, palette):
-    if event.inaxes != ax:
-        return
-    x, y = blob(center=(event.xdata, event.ydata), r=random.uniform(0.1,0.3), wobble=random.uniform(0.1,0.3))
-    color = random.choice(palette)
-    ax.fill(x, y, color=color, alpha=random.uniform(0.3,0.6), edgecolor=(0,0,0,0))
-    plt.draw()
+# -----------------------------
+# SESSION STATE
+# -----------------------------
+if "palette" not in st.session_state:
+    st.session_state.palette = random_palette()
 
-def interactive_poster():
-    fig, ax = plt.subplots(figsize=(7,10))
-    plt.subplots_adjust(left=0.25, bottom=0.25)
+if "blobs" not in st.session_state:
+    st.session_state.blobs = []
 
-    palette = random_palette()
+# -----------------------------
+# SIDEBAR UI
+# -----------------------------
+st.sidebar.header("Controls")
 
-    ax_layers = plt.axes([0.25, 0.15, 0.65, 0.03])
-    ax_wobble = plt.axes([0.25, 0.10, 0.65, 0.03])
+n_layers = st.sidebar.slider("Initial Layers", 1, 30, 12)
+wobble = st.sidebar.slider("Wobble", 0.05, 0.5, 0.25)
 
-    slider_layers = Slider(ax_layers, 'Layers', 1, 30, valinit=12, valstep=1)
-    slider_wobble = Slider(ax_wobble, 'Wobble', 0.05, 0.5, valinit=0.25)
+if st.sidebar.button("Generate New Poster"):
+    st.session_state.blobs = []
+    for _ in range(n_layers):
+        cx, cy = random.random(), random.random()
+        r = random.uniform(0.15, 0.45)
+        st.session_state.blobs.append({
+            "center": (cx, cy),
+            "r": r,
+            "wobble": wobble,
+            "color": random.choice(st.session_state.palette),
+            "alpha": random.uniform(0.3, 0.6),
+        })
 
-    def update(val):
-        n_layers = int(slider_layers.val)
-        wobble_val = slider_wobble.val
-        draw_poster(ax, n_layers=n_layers, wobble_range=(wobble_val, wobble_val), palette=palette)
+# -----------------------------
+# DRAW FIGURE
+# -----------------------------
+fig = draw_poster(st.session_state.blobs)
+st.pyplot(fig, use_container_width=False)
 
-    slider_layers.on_changed(update)
-    slider_wobble.on_changed(update)
+# -----------------------------
+# CLICK TO ADD BLOB
+# -----------------------------
+coords = streamlit_image_coordinates(fig)
 
-    fig.canvas.mpl_connect('button_press_event', lambda event: on_click(event, ax, palette))
+if coords is not None:
+    # Matplotlib figure coordinates are normalized (0~1)
+    x = coords["x"] / fig.bbox.width
+    y = 1 - (coords["y"] / fig.bbox.height)
 
-    draw_poster(ax, palette=palette)
-    plt.show()
+    st.session_state.blobs.append({
+        "center": (x, y),
+        "r": random.uniform(0.1, 0.3),
+        "wobble": random.uniform(0.1, 0.3),
+        "color": random.choice(st.session_state.palette),
+        "alpha": random.uniform(0.3, 0.6),
+    })
 
-interactive_poster()
+    st.experimental_rerun()
